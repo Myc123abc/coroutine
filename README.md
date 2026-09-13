@@ -137,3 +137,41 @@ Then, the awaiter object is obtained, as follows:
   - `operator co_await(static_cast<Awaitable&&>(awaitable))` for the non-member overload.
 - otherwise, if overload resolution finds no operator `co_await`, the awaiter is awaitable, as-is.
 - otherwise, if overload resolution is ambiguous, the program is ill-formed.
+
+If the expression above is a prvalue, the awaiter object is a temporary materialized from it. Otherwise, if the expression above is a glvalue, the awaiter object is the object to which it refers.
+
+> C++ use `co_await awaitable`. Internally,  it obtains an awaiter from the awaitable and uses the awaiter to perform the ready, suspend, resume operations. Finally, the `co_await` expression produces the result of `await_resume()`.
+
+Then, `awaiter.await_read()` is called. If its result, contextually-converted to `bool` is `false` then the coroutine is suspended. `awaiter.await_suspend(handle)` is called, where handle is the coroutine handle representing the current coroutine. Inside that function, the suspend coroutine state is observable via that handle, and it's this function's responsibility to schedule it to resume on some executor, or to be destroyed.
+
+- if `await_suspend` returns `void`, control is immediately returned to the caller/resumer of the current coroutine, otherwise
+- if `await_suspend` returns `bool`,
+  - the value `true` returns control to the caller/resumer of the current coroutine
+  - the value `false` resumes the current coroutine.
+- if `await_suspend` returns a coroutine handle for some other coroutine, that handle is resumed.
+- if `await_suspend` throws an exception, the exception is caught, the coroutine is resumed, and the exception is immediately rethrow.
+
+Finally, `awaiter.await_resume()` is called, and its result is the result of the whole `awaiter.await_resume()`.
+
+If the coroutine was suspended in the `co_await` expression, and is later resumed, the resume point is immediately before the call to `awaiter.await_resume()`.
+
+Note that the coroutine is fully suspended before entering `awaiter.await_suspend()`. Its handle can be shared with another thread and resumed before the `await_suspend()` function returns.
+
+Note: the awaiter object is part of coroutine state (as a temporary whose lifetime crosses a suspension point) and is destroyed before the `co_await` expression finishes.
+
+## co_yield
+`co_yield` expression returns a value to the caller and suspends the current coroutine.
+
+<table>
+  <tr>
+    <td>co_yield expr</td>
+  </tr>
+  <tr>
+    <td>co_yield braced-init-list</td>
+  </tr>
+</table>
+
+It is equivalent to 
+```C++
+co_await promise.yield_value(expr)
+```
